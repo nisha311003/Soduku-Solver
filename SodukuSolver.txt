@@ -1,0 +1,373 @@
+package SodukoSolver;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.Random;
+
+public class SodukoSolver extends JFrame {
+    private static final long serialVersionUID = 1L;
+    private int gridSize = 9;
+    private int solvingSpeed = 500; // milliseconds
+    private JTextField[][] cells;
+    private boolean[][] fixedValues;
+    private JPanel gridPanel;
+    private JTextField sizeField;
+    private JTextField speedField;
+    private CardLayout cardLayout;
+    private JPanel mainPanel;
+    private volatile boolean isPaused = false; // Flag to control pausing
+
+    public SodukoSolver() {
+        setTitle("Sudoku Solver Application");
+        setSize(900, 900);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+        setResizable(false);
+        getContentPane().setBackground(new Color(30, 30, 30));
+
+        cardLayout = new CardLayout();
+        mainPanel = new JPanel(cardLayout);
+
+        JPanel startPanel = createStartPanel();
+        JPanel gamePanel = createGamePanel();
+        JPanel endPanel = createEndPanel();
+
+        mainPanel.add(startPanel, "start");
+        mainPanel.add(gamePanel, "game");
+        mainPanel.add(endPanel, "end");
+
+        add(mainPanel, BorderLayout.CENTER);
+        cardLayout.show(mainPanel, "start");
+    }
+
+    private JPanel createStartPanel() {
+        JPanel startPanel = new JPanel();
+        startPanel.setLayout(new GridBagLayout());
+        startPanel.setBackground(new Color(50, 50, 50));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.CENTER;
+
+        JLabel titleLabel = new JLabel("Sudoku Solver Application");
+        titleLabel.setForeground(Color.WHITE);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2;
+        startPanel.add(titleLabel, gbc);
+
+        JButton startButton = new ShadowButton("Start Game", new Color(76, 175, 80));
+        startButton.setForeground(Color.WHITE);
+        startButton.setFocusPainted(false);
+        startButton.setFont(new Font("Arial", Font.BOLD, 14));
+        startButton.addActionListener(e -> cardLayout.show(mainPanel, "game"));
+        gbc.gridy = 1;
+        startPanel.add(startButton, gbc);
+
+        return startPanel;
+    }
+
+    private JPanel createGamePanel() {
+        JPanel gamePanel = new JPanel();
+        gamePanel.setLayout(new BorderLayout());
+        gamePanel.setBackground(new Color(30, 30, 30));
+
+        // Input panel
+        JPanel inputPanel = new JPanel();
+        inputPanel.setLayout(new GridBagLayout());
+        inputPanel.setBackground(new Color(50, 50, 50));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.CENTER;
+
+        JLabel sizeLabel = new JLabel("Grid Size: ");
+        sizeLabel.setForeground(Color.WHITE);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 1;
+        inputPanel.add(sizeLabel, gbc);
+
+        sizeField = new JTextField(2);
+        sizeField.setText(String.valueOf(gridSize));
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        inputPanel.add(sizeField, gbc);
+
+        JLabel speedLabel = new JLabel("Solving Speed (ms): ");
+        speedLabel.setForeground(Color.WHITE);
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        inputPanel.add(speedLabel, gbc);
+
+        speedField = new JTextField(4);
+        speedField.setText(String.valueOf(solvingSpeed));
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        inputPanel.add(speedField, gbc);
+
+        JButton updateButton = new ShadowButton("Update", new Color(76, 175, 80));
+        updateButton.setForeground(Color.WHITE);
+        updateButton.setFocusPainted(false);
+        updateButton.setFont(new Font("Arial", Font.BOLD, 14));
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.CENTER;
+        inputPanel.add(updateButton, gbc);
+
+        // Add Solve Button
+        JButton solveButton = new ShadowButton("Solve", new Color(33, 150, 243));
+        solveButton.setForeground(Color.WHITE);
+        solveButton.setFocusPainted(false);
+        solveButton.setFont(new Font("Arial", Font.BOLD, 14));
+        gbc.gridy = 3;
+        gbc.gridwidth = 1; // Adjust to fit two buttons side by side
+        inputPanel.add(solveButton, gbc);
+
+        // Add Pause Button next to Solve Button
+        JButton pauseButton = new ShadowButton("Pause", new Color(255, 193, 7));
+        pauseButton.setForeground(Color.WHITE);
+        pauseButton.setFocusPainted(false);
+        pauseButton.setFont(new Font("Arial", Font.BOLD, 14));
+        gbc.gridx = 1; // Position it right next to the Solve button
+        gbc.gridy = 3;
+        inputPanel.add(pauseButton, gbc);
+
+        updateButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    gridSize = Integer.parseInt(sizeField.getText());
+                    solvingSpeed = Integer.parseInt(speedField.getText());
+                    createGrid();
+                    fillRandomValues();
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(null, "Invalid input. Please enter valid numbers.");
+                }
+            }
+        });
+
+        solveButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                isPaused = false; // Reset pause flag
+                new Thread(() -> {
+                    if (solveSudoku()) {
+                        showEndMessage("You Win!");
+                    } else {
+                        showEndMessage("No Solution Found.");
+                    }
+                }).start();
+            }
+        });
+
+        pauseButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                isPaused = !isPaused;
+                pauseButton.setText(isPaused ? "Resume" : "Pause");
+            }
+        });
+
+        gamePanel.add(inputPanel, BorderLayout.NORTH);
+
+        // Sudoku grid panel
+        gridPanel = new JPanel();
+        gridPanel.setBackground(new Color(58, 65, 73));
+        createGrid();
+        fillRandomValues();
+        gamePanel.add(gridPanel, BorderLayout.CENTER);
+
+        return gamePanel;
+    }
+
+    private JPanel createEndPanel() {
+        JPanel endPanel = new JPanel();
+        endPanel.setLayout(new GridBagLayout());
+        endPanel.setBackground(new Color(50, 50, 50));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.CENTER;
+
+        JLabel endMessageLabel = new JLabel("");
+        endMessageLabel.setForeground(Color.WHITE);
+        endMessageLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2;
+        endPanel.add(endMessageLabel, gbc);
+
+        JButton restartButton = new ShadowButton("Restart Game", new Color(76, 175, 80));
+        restartButton.setForeground(Color.WHITE);
+        restartButton.setFocusPainted(false);
+        restartButton.setFont(new Font("Arial", Font.BOLD, 14));
+        restartButton.addActionListener(e -> cardLayout.show(mainPanel, "start"));
+        gbc.gridy = 1;
+        endPanel.add(restartButton, gbc);
+
+        return endPanel;
+    }
+
+    private void showEndMessage(String message) {
+        SwingUtilities.invokeLater(() -> {
+            Component[] components = mainPanel.getComponents();
+            for (Component component : components) {
+                if (component instanceof JPanel) {
+                    JPanel panel = (JPanel) component;
+                    if (panel.getLayout() instanceof GridBagLayout) {
+                        Component[] panelComponents = panel.getComponents();
+                        for (Component panelComponent : panelComponents) {
+                            if (panelComponent instanceof JLabel) {
+                                ((JLabel) panelComponent).setText(message);
+                            }
+                        }
+                    }
+                }
+            }
+            cardLayout.show(mainPanel, "end");
+        });
+    }
+
+    private void createGrid() {
+        gridPanel.removeAll();
+        gridPanel.setLayout(new GridLayout(gridSize, gridSize));
+        cells = new JTextField[gridSize][gridSize];
+        fixedValues = new boolean[gridSize][gridSize];
+
+        for (int i = 0; i < gridSize; i++) {
+            for (int j = 0; j < gridSize; j++) {
+                cells[i][j] = new JTextField(2);
+                cells[i][j].setHorizontalAlignment(JTextField.CENTER);
+                cells[i][j].setFont(new Font("Arial", Font.BOLD, 26));
+                cells[i][j].setBackground(new Color(255, 255, 255));
+                cells[i][j].setForeground(new Color(0, 0, 0));
+                cells[i][j].setBorder(BorderFactory.createLineBorder(new Color(100, 100, 100), 1));
+                gridPanel.add(cells[i][j]);
+            }
+        }
+        gridPanel.revalidate();
+        gridPanel.repaint();
+    }
+
+    private void fillRandomValues() {
+        Random rand = new Random();
+        for (int i = 0; i < gridSize; i++) {
+            for (int j = 0; j < gridSize; j++) {
+                if (rand.nextInt(4) == 0) { // Randomly populate some cells
+                    int value = rand.nextInt(gridSize) + 1;
+                    cells[i][j].setText(String.valueOf(value));
+                    cells[i][j].setEditable(false);
+                    cells[i][j].setForeground(new Color(0, 0, 255));
+                    fixedValues[i][j] = true;
+                } else {
+                    cells[i][j].setText("");
+                    cells[i][j].setEditable(true);
+                    cells[i][j].setForeground(new Color(0, 0, 0));
+                    fixedValues[i][j] = false;
+                }
+            }
+        }
+    }
+
+    private boolean solveSudoku() {
+        return solveSudoku(0, 0);
+    }
+
+    private boolean solveSudoku(int row, int col) {
+        if (row == gridSize) {
+            return true;
+        }
+
+        if (isPaused) {
+            try {
+                while (isPaused) {
+                    Thread.sleep(100); // Pause execution while paused
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        if (fixedValues[row][col]) {
+            return solveNext(row, col);
+        }
+
+        for (int num = 1; num <= gridSize; num++) {
+            if (isValid(row, col, num)) {
+                cells[row][col].setText(String.valueOf(num));
+                try {
+                    Thread.sleep(solvingSpeed); // Slow down for visual effect
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                if (solveNext(row, col)) {
+                    return true;
+                }
+            }
+            cells[row][col].setText("");
+        }
+
+        return false;
+    }
+
+    private boolean solveNext(int row, int col) {
+        int nextCol = col + 1;
+        int nextRow = row + (nextCol / gridSize);
+        nextCol %= gridSize;
+        return solveSudoku(nextRow, nextCol);
+    }
+
+    private boolean isValid(int row, int col, int num) {
+        for (int i = 0; i < gridSize; i++) {
+            if (cells[row][i].getText().equals(String.valueOf(num)) ||
+                cells[i][col].getText().equals(String.valueOf(num))) {
+                return false;
+            }
+        }
+
+        int boxSize = (int) Math.sqrt(gridSize);
+        int boxRowStart = (row / boxSize) * boxSize;
+        int boxColStart = (col / boxSize) * boxSize;
+
+        for (int i = 0; i < boxSize; i++) {
+            for (int j = 0; j < boxSize; j++) {
+                if (cells[boxRowStart + i][boxColStart + j].getText().equals(String.valueOf(num))) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private class ShadowButton extends JButton {
+        private static final long serialVersionUID = 1L;
+
+        public ShadowButton(String text, Color color) {
+            super(text);
+            setBackground(color);
+            setFocusPainted(false);
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(0, 0, 0), 2),
+                BorderFactory.createEmptyBorder(10, 25, 10, 25)
+            ));
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                public void mouseEntered(java.awt.event.MouseEvent evt) {
+                    setBackground(color.darker());
+                }
+                public void mouseExited(java.awt.event.MouseEvent evt) {
+                    setBackground(color);
+                }
+            });
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            SodukoSolver solver = new SodukoSolver();
+            solver.setVisible(true);
+        });
+    }
+}
